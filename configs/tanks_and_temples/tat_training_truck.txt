@@ -9,7 +9,7 @@ no_reload = False
 testskip = 1
 
 ### TRAINING
-N_iters = 62500
+N_iters = 250000
 N_rand = 2048
 lrate = 0.0005
 lrate_decay_factor = 0.1
@@ -33,4 +33,4 @@ use_viewdirs = True
 ### CONSOLE AND TENSORBOARD
 i_img = 2000
 i_print = 200
-i_weights = 2500
+i_weights = 5000

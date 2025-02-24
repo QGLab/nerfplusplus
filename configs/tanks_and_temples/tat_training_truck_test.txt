@@ -34,6 +34,6 @@ netwidth = 256
 use_viewdirs = True
 
 ### CONSOLE AND TENSORBOARD
-i_img = 200
+i_img = 2000
 i_print = 200
-i_weights = 200
+i_weights = 5000

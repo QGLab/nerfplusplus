@@ -2,6 +2,13 @@ import torch
 # import torch.nn as nn
 # import torch.nn.functional as F
 import numpy as np
+from skimage.metrics import peak_signal_noise_ratio as PSNR
+from skimage.metrics import structural_similarity as SSIM
+
+def calcPSNR(img1, img2) -> float:
+    return PSNR(img1, img2, data_range=1.0)
+def calcSSIM(img1, img2) -> float:
+    return SSIM(img1, img2, channel_axis=2, data_range=1.0)
 
 
 HUGE_NUMBER = 1e10

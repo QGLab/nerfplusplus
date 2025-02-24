@@ -10,7 +10,7 @@ import os
 # from ddp_model import NerfNet
 import time
 from data_loader_split import load_data_split
-from utils import mse2psnr, colorize_np, to8b
+from utils import mse2psnr, colorize_np, to8b, calcSSIM, calcPSNR
 import imageio
 from ddp_train_nerf import config_parser, setup_logger, setup, cleanup, render_single_image, create_nerf
 import logging
@@ -49,6 +49,9 @@ def ddp_test_nerf(rank, args):
 
         ###### load data and create ray samplers; each process should do this
         ray_samplers = load_data_split(args.datadir, args.scene, split, try_load_min_depth=args.load_min_depth)
+        psnr_sum = 0.0
+        ssim_sum = 0.0
+        count = 0
         for idx in range(len(ray_samplers)):
             ### each process should do this; but only main process merges the results
             fname = '{:06d}.png'.format(idx)
@@ -62,7 +65,7 @@ def ddp_test_nerf(rank, args):
             time0 = time.time()
             ret = render_single_image(rank, args.world_size, models, ray_samplers[idx], args.chunk_size)
             dt = time.time() - time0
-            if rank == 0:    # only main process should do this
+            if rank == 0:  # only main process should do this
                 logger.info('Rendered {} in {} seconds'.format(fname, dt))
 
                 # only save last level
@@ -70,8 +73,13 @@ def ddp_test_nerf(rank, args):
                 # compute psnr if ground-truth is available
                 if ray_samplers[idx].img_path is not None:
                     gt_im = ray_samplers[idx].get_img()
-                    psnr = mse2psnr(np.mean((gt_im - im) * (gt_im - im)))
+                    psnr = calcPSNR(gt_im, im)
+                    ssim = calcSSIM(gt_im, im)
                     logger.info('{}: psnr={}'.format(fname, psnr))
+                    logger.info('{}: ssim={}'.format(fname, ssim))
+                    ssim_sum += ssim
+                    psnr_sum += psnr
+                    count += 1
 
                 im = to8b(im)
                 imageio.imwrite(os.path.join(out_dir, fname), im)
@@ -96,6 +104,13 @@ def ddp_test_nerf(rank, args):
 
             torch.cuda.empty_cache()
 
+        # logger psnr
+        if rank == 0 and count > 0:
+            avg_psnr = psnr_sum / count
+            avg_ssim = ssim_sum / count
+            logger.info('Average PSNR for split {}: {}'.format(split, avg_psnr))
+            logger.info('Average SSIM for split {}: {}'.format(split, avg_ssim))
+
     # clean up for multi-processing
     cleanup()
 
@@ -117,4 +132,3 @@ def test():
 if __name__ == '__main__':
     setup_logger()
     test()
-
