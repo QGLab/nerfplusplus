@@ -33,7 +33,7 @@ def load_data_split(basedir, scene, split, skip=1, try_load_min_depth=True, only
 
     if basedir[-1] == '/':          # remove trailing '/'
         basedir = basedir[:-1]
-     
+
     split_dir = '{}/{}/{}'.format(basedir, scene, split)
 
     if only_img_files:
@@ -58,6 +58,18 @@ def load_data_split(basedir, scene, split, skip=1, try_load_min_depth=True, only
         assert(len(img_files) == cam_cnt)
     else:
         img_files = [None, ] * cam_cnt
+
+    # depth files
+    if split=="train":
+        depth_files = find_files('{}/depth'.format(split_dir), exts=['*.png', '*.jpg'])
+        if len(depth_files) > 0:
+            logger.info('raw depth_files: {}'.format(len(depth_files)))
+            depth_files = depth_files[::skip]
+            assert(len(depth_files) == cam_cnt)
+        else:
+            depth_files = [None, ] * cam_cnt
+    else:
+        depth_files = [None, ] * cam_cnt
 
     # mask files
     mask_files = find_files('{}/mask'.format(split_dir), exts=['*.png', '*.jpg'])
@@ -96,6 +108,7 @@ def load_data_split(basedir, scene, split, skip=1, try_load_min_depth=True, only
 
         ray_samplers.append(RaySamplerSingleImage(H=H, W=W, intrinsics=intrinsics, c2w=pose,
                                                   img_path=img_files[i],
+                                                  depth_path=depth_files[i],
                                                   mask_path=mask_files[i],
                                                   min_depth_path=mindepth_files[i],
                                                   max_depth=max_depth))

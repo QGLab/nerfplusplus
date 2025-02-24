@@ -4,6 +4,7 @@ import torch
 import cv2
 import imageio
 
+
 ########################################################################################################################
 # ray batch sampling
 ########################################################################################################################
@@ -17,7 +18,7 @@ def get_rays_single_image(H, W, intrinsics, c2w):
     '''
     u, v = np.meshgrid(np.arange(W), np.arange(H))
 
-    u = u.reshape(-1).astype(dtype=np.float32) + 0.5    # add half pixel
+    u = u.reshape(-1).astype(dtype=np.float32) + 0.5  # add half pixel
     v = v.reshape(-1).astype(dtype=np.float32) + 0.5
     pixels = np.stack((u, v, np.ones_like(u)), axis=0)  # (3, H*W)
 
@@ -36,11 +37,12 @@ def get_rays_single_image(H, W, intrinsics, c2w):
 
 class RaySamplerSingleImage(object):
     def __init__(self, H, W, intrinsics, c2w,
-                       img_path=None,
-                       resolution_level=1,
-                       mask_path=None,
-                       min_depth_path=None,
-                       max_depth=None):
+                         img_path=None,
+                         depth_path=None,
+                         resolution_level=1,
+                         mask_path=None,
+                         min_depth_path=None,
+                         max_depth=None):
         super().__init__()
         self.W_orig = W
         self.H_orig = H
@@ -48,6 +50,7 @@ class RaySamplerSingleImage(object):
         self.c2w_mat = c2w
 
         self.img_path = img_path
+        self.depth_path = depth_path
         self.mask_path = mask_path
         self.min_depth_path = min_depth_path
         self.max_depth = max_depth
@@ -69,6 +72,13 @@ class RaySamplerSingleImage(object):
                 self.img = self.img.reshape((-1, 3))
             else:
                 self.img = None
+
+            if self.depth_path is not None:
+                self.depth_img = imageio.imread(self.depth_path).astype(np.float32) / 65535.0
+                self.depth_img = cv2.resize(self.depth_img, (self.W, self.H), interpolation=cv2.INTER_AREA)
+                self.depth_img = self.depth_img.reshape((-1, 1))
+            else:
+                self.depth_img = None
 
             if self.mask_path is not None:
                 self.mask = imageio.imread(self.mask_path).astype(np.float32) / 255.
@@ -92,6 +102,11 @@ class RaySamplerSingleImage(object):
             return self.img.reshape((self.H, self.W, 3))
         else:
             return None
+    def get_depth(self):
+        if self.depth_img is not None:
+            return self.depth_img.reshape((self.H, self.W, 3))
+        else:
+            return None
 
     def get_all(self):
         if self.min_depth is not None:
@@ -103,6 +118,7 @@ class RaySamplerSingleImage(object):
             ('ray_o', self.rays_o),
             ('ray_d', self.rays_d),
             ('depth', self.depth),
+            ('depth_img', self.depth_img),
             ('rgb', self.img),
             ('mask', self.mask),
             ('min_depth', min_depth)
@@ -125,8 +141,8 @@ class RaySamplerSingleImage(object):
             quad_W = half_W // 2
 
             # pixel coordinates
-            u, v = np.meshgrid(np.arange(half_W-quad_W, half_W+quad_W),
-                               np.arange(half_H-quad_H, half_H+quad_H))
+            u, v = np.meshgrid(np.arange(half_W - quad_W, half_W + quad_W),
+                               np.arange(half_H - quad_H, half_H + quad_H))
             u = u.reshape(-1)
             v = v.reshape(-1)
 
@@ -136,16 +152,21 @@ class RaySamplerSingleImage(object):
             select_inds = v[select_inds] * self.W + u[select_inds]
         else:
             # Random from one image
-            select_inds = np.random.choice(self.H*self.W, size=(N_rand,), replace=False)
+            select_inds = np.random.choice(self.H * self.W, size=(N_rand,), replace=False)
 
-        rays_o = self.rays_o[select_inds, :]    # [N_rand, 3]
-        rays_d = self.rays_d[select_inds, :]    # [N_rand, 3]
-        depth = self.depth[select_inds]         # [N_rand, ]
+        rays_o = self.rays_o[select_inds, :]  # [N_rand, 3]
+        rays_d = self.rays_d[select_inds, :]  # [N_rand, 3]
+        depth = self.depth[select_inds]  # [N_rand, ]
 
         if self.img is not None:
-            rgb = self.img[select_inds, :]          # [N_rand, 3]
+            rgb = self.img[select_inds, :]  # [N_rand, 3]
         else:
             rgb = None
+
+        if self.depth_img is not None:
+            depth_img = self.depth_img[select_inds, :]
+        else:
+            depth_img = None
 
         if self.mask is not None:
             mask = self.mask[select_inds]
@@ -161,6 +182,7 @@ class RaySamplerSingleImage(object):
             ('ray_o', rays_o),
             ('ray_d', rays_d),
             ('depth', depth),
+            ('depth_img', depth_img),
             ('rgb', rgb),
             ('mask', mask),
             ('min_depth', min_depth),
